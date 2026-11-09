@@ -3,8 +3,11 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"mangahub/internal/handler"
+	"mangahub/internal/repo"
 	"os"
 
+	"github.com/gin-gonic/gin"
 	_ "modernc.org/sqlite"
 )
 
@@ -21,6 +24,9 @@ func main() {
 	}
 
 	defer db.Close()
+
+	userRepo := repo.NewUserRepo(db)
+	authHandler := handler.NewAuthHandler(userRepo)	
 
 	var version string
 	err = db.QueryRow("SELECT sqlite_version()").Scan(&version)
@@ -55,7 +61,27 @@ func main() {
 		fmt.Println("Error using schema: ", err)
 		return
 	}
-	
 
 	fmt.Println("Created table!")
+
+	r := gin.Default() 
+
+	auth := r.Group("api/auth")
+	{
+		auth.POST("/register", authHandler.Register)
+		auth.POST("/login")
+	}
+
+	api := r.Group("/api")
+	api.Use()
+	{
+		api.GET("/library")
+		api.POST("/library")
+		api.PUT("/library/:mangaId/progress")
+	}
+
+	fmt.Println("Starting Gin on port 8080")
+	if err := r.Run(":8080"); err != nil {
+		fmt.Println("Failed to start server:", err)
+	}
 }
