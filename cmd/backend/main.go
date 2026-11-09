@@ -30,4 +30,32 @@ func main() {
 	}
 
 	fmt.Println("Connected! SQLite version:", version)
+
+	schema := `
+	CREATE TABLE IF NOT EXISTS users (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		username TEXT NOT NULL UNIQUE,
+		password TEXT NOT NULL,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+
+	CREATE TABLE IF NOT EXISTS user_library (
+		user_id INTEGER NOT NULL,
+		manga_id INTEGER NOT NULL,
+		status TEXT NOT NULL,
+		current_chap INTEGER DEFAULT 0,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		version INTEGER DEFAULT 1,
+		PRIMARY KEY (user_id, manga_id),
+		FOREIGN KEY (user_id) REFERENCES users(id)
+	);
+	`
+
+	if _, err := db.Exec(schema); err != nil {
+		fmt.Println("Error using schema: ", err)
+		return
+	}
+	
+
+	fmt.Println("Created table!")
 }
