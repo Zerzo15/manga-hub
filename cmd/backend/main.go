@@ -29,7 +29,7 @@ func main() {
 		return
 	}
 
-	fmt.Println("Connected! SQLite version:", version)
+	fmt.Println("Connected to backend.db! SQLite version:", version)
 
 	schema := `
 	CREATE TABLE IF NOT EXISTS users (
