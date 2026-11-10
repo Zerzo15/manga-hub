@@ -1,7 +1,7 @@
 package models
 
 //dto
-type LoginRequest struct {
+type AuthRequest struct {
 	Username string `json:"username" binding:"required"`
 	Password string `json:"password" binding:"required"`
 }

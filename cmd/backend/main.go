@@ -69,7 +69,7 @@ func main() {
 	auth := r.Group("api/auth")
 	{
 		auth.POST("/register", authHandler.Register)
-		auth.POST("/login")
+		auth.POST("/login", authHandler.Login)
 	}
 
 	api := r.Group("/api")
