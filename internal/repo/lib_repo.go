@@ -46,3 +46,20 @@ func(r *LibraryRepository) GetLibrary(userID int64) ([]models.LibraryItem, error
 
 	return items, nil
 }
+
+func(r *LibraryRepository) ExistsByUserIDAndMangaID(userID, mangaID int64) (bool, error) {
+	var exists bool
+
+	err := r.db.QueryRow(` 
+		SELECT EXISTS (
+		SELECT 1
+		FROM user_library 
+		WHERE user_id = ? AND manga = ?
+		)
+	`, userID, mangaID).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+
+	return exists, nil
+}

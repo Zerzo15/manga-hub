@@ -26,7 +26,10 @@ func main() {
 	defer db.Close()
 
 	userRepo := repo.NewUserRepo(db)
+	libRepo := repo.NewLibraryRepo(db)
+
 	authHandler := handler.NewAuthHandler(userRepo)	
+	libHandler := handler.NewLibraryHandler(libRepo)
 
 	var version string
 	err = db.QueryRow("SELECT sqlite_version()").Scan(&version)
@@ -75,8 +78,8 @@ func main() {
 	api := r.Group("/api")
 	api.Use()
 	{
-		api.GET("/library")
-		api.POST("/library")
+		api.GET("/library", libHandler.GetLibrary)
+		api.POST("/library", libHandler.AddToLibrary)
 		api.PUT("/library/:mangaId/progress")
 	}
 
