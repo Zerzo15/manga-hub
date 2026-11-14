@@ -1,9 +1,11 @@
 package handler
 
 import (
+	"database/sql"
 	"mangahub/internal/models"
 	"mangahub/internal/repo"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
@@ -61,5 +63,64 @@ func (h *LibraryHandler) GetLibrary(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, items)
+}
 
+func (h *LibraryHandler) UpdateProgress(c *gin.Context) {
+	userID := c.GetInt("user_id")
+
+	mangaIDStr := c.Param("mangaId")
+	mangaID, err := strconv.ParseInt(mangaIDStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid manga ID format"})
+		return
+	}
+	
+
+	var req models.UpdateProgressRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "current chapter is required"})
+		return
+	}
+
+	newVersion, err := h.libRepo.UpdateProgress(int64(userID), mangaID, req.CurrentChapter)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "manga not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":         "progress updated",
+		"manga_id":        mangaID,
+		"current_chapter": req.CurrentChapter,
+		"version":         newVersion,
+	})
+}
+
+func (h *LibraryHandler) DeleteManga(c *gin.Context) {
+	userID := c.GetInt("user_id")
+
+	mangaIDStr := c.Param("mangaId")
+	mangaID, err := strconv.ParseInt(mangaIDStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid manga ID format"})
+		return
+	}
+
+	if err := h.libRepo.DeleteManga(int64(userID), mangaID); err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "manga not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		return
+	}
+	
+	c.JSON(http.StatusOK, gin.H{
+		"message": "manga deleted",
+		"manga_id": mangaID,
+	})
 }

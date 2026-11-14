@@ -63,3 +63,42 @@ func(r *LibraryRepository) ExistsByUserIDAndMangaID(userID, mangaID int64) (bool
 
 	return exists, nil
 }
+
+func(r *LibraryRepository) UpdateProgress(userID, mangaID int64, chapter int) (int, error) {
+	res, err := r.db.Exec(`
+		UPDATE user_library 
+		SET current_chapter = ?, version = version + 1, updated_at = CURRENT_TIMESTAMP 
+		WHERE user_id = ? AND manga_id = ?`,
+		chapter, userID, mangaID,
+	)
+	if err != nil {
+		return 0, err
+	}
+
+	rowAffected, _ := res.RowsAffected()
+	if rowAffected == 0 {
+		return 0, sql.ErrNoRows
+	}
+
+	var newVersion int 
+	err = r.db.QueryRow("SELECT version FROM user_id = ?, manga_id = ?", userID, mangaID).Scan(&newVersion)
+
+	return newVersion, nil
+}
+
+func(r *LibraryRepository) DeleteManga(userID, mangaID int64) error {
+	res, err := r.db.Exec(`
+		DELETE FROM user_library 
+		WHERE user_id = ? AND manga_id = ?`, 
+		userID, mangaID)
+	if err != nil {
+		return err
+	}
+
+	rowAffected, _ := res.RowsAffected()
+	if rowAffected == 0 {
+		return sql.ErrNoRows
+	}
+
+	return nil
+}

@@ -6,7 +6,7 @@ type AddLibraryRequest struct {
 }
 
 type UpdateProgressRequest struct {
-	CurrentChapter int `json:"current_chapter"`
+	CurrentChapter int `json:"current_chapter" binding:"required, min=0"`
 }
 
 type LibraryItem struct {
