@@ -19,7 +19,7 @@ func NewLibraryHandler(libRepo * repo.LibraryRepository) *LibraryHandler {
 }
 
 func (h *LibraryHandler) AddToLibrary(c *gin.Context) {
-	userId := c.GetInt64("userID")
+	userID := c.GetInt64("user_id")
 
 	var req models.AddLibraryRequest
 	if err := c.ShouldBind(&req); err != nil {
@@ -27,7 +27,7 @@ func (h *LibraryHandler) AddToLibrary(c *gin.Context) {
 		return 
 	}
 
-	checker, err := h.libRepo.ExistsByUserIDAndMangaID(userId, req.MangaID)
+	checker, err := h.libRepo.ExistsByUserIDAndMangaID(userID, req.MangaID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
 		return 
@@ -37,13 +37,13 @@ func (h *LibraryHandler) AddToLibrary(c *gin.Context) {
 		return 
 	}
 
-	id, err := h.libRepo.Create(userId, req.MangaID, req.Status) 
+	id, err := h.libRepo.Create(userID, req.MangaID, req.Status) 
 	if err != nil {
 		return 
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
-		"user_id": userId,
+		"user_id": userID,
 		"manga_id": id,
 		"status": req.Status,
 	})
@@ -66,7 +66,7 @@ func (h *LibraryHandler) GetLibrary(c *gin.Context) {
 }
 
 func (h *LibraryHandler) UpdateProgress(c *gin.Context) {
-	userID := c.GetInt("user_id")
+	userID := c.GetInt64("user_id")
 
 	mangaIDStr := c.Param("mangaId")
 	mangaID, err := strconv.ParseInt(mangaIDStr, 10, 64)
@@ -82,7 +82,7 @@ func (h *LibraryHandler) UpdateProgress(c *gin.Context) {
 		return
 	}
 
-	newVersion, err := h.libRepo.UpdateProgress(int64(userID), mangaID, req.CurrentChapter)
+	newVersion, err := h.libRepo.UpdateProgress(userID, mangaID, req.CurrentChapter)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			c.JSON(http.StatusNotFound, gin.H{"error": "manga not found"})
@@ -101,7 +101,7 @@ func (h *LibraryHandler) UpdateProgress(c *gin.Context) {
 }
 
 func (h *LibraryHandler) DeleteManga(c *gin.Context) {
-	userID := c.GetInt("user_id")
+	userID := c.GetInt64("user_id")
 
 	mangaIDStr := c.Param("mangaId")
 	mangaID, err := strconv.ParseInt(mangaIDStr, 10, 64)
@@ -110,7 +110,7 @@ func (h *LibraryHandler) DeleteManga(c *gin.Context) {
 		return
 	}
 
-	if err := h.libRepo.DeleteManga(int64(userID), mangaID); err != nil {
+	if err := h.libRepo.DeleteManga(userID, mangaID); err != nil {
 		if err == sql.ErrNoRows {
 			c.JSON(http.StatusNotFound, gin.H{"error": "manga not found"})
 			return
