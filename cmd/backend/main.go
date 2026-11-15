@@ -76,12 +76,12 @@ func main() {
 	}
 
 	api := r.Group("/api")
-	api.Use()
+	api.Use(handler.AuthMiddleWare())
 	{
 		api.GET("/library", libHandler.GetLibrary)
 		api.POST("/library", libHandler.AddToLibrary)
 		api.PUT("/library/:mangaId/progress", libHandler.UpdateProgress)
-		api.DELETE("library/:mangaId", libHandler.DeleteManga)
+		api.DELETE("/library/:mangaId", libHandler.DeleteManga)
 	}
 
 	fmt.Println("Starting Gin on port 8080")

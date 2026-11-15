@@ -39,7 +39,8 @@ func (h *LibraryHandler) AddToLibrary(c *gin.Context) {
 
 	id, err := h.libRepo.Create(userID, req.MangaID, req.Status) 
 	if err != nil {
-		return 
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+		return
 	}
 
 	c.JSON(http.StatusCreated, gin.H{

@@ -54,7 +54,7 @@ func(r *LibraryRepository) ExistsByUserIDAndMangaID(userID, mangaID int64) (bool
 		SELECT EXISTS (
 		SELECT 1
 		FROM user_library 
-		WHERE user_id = ? AND manga = ?
+		WHERE user_id = ? AND manga_id = ?
 		)
 	`, userID, mangaID).Scan(&exists)
 	if err != nil {
@@ -81,7 +81,7 @@ func(r *LibraryRepository) UpdateProgress(userID, mangaID int64, chapter int) (i
 	}
 
 	var newVersion int 
-	err = r.db.QueryRow("SELECT version FROM user_id = ?, manga_id = ?", userID, mangaID).Scan(&newVersion)
+	err = r.db.QueryRow("SELECT version FROM user_id = ? AND manga_id = ?", userID, mangaID).Scan(&newVersion)
 
 	return newVersion, nil
 }
