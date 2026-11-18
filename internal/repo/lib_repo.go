@@ -14,7 +14,7 @@ func NewLibraryRepo(db *sql.DB) *LibraryRepository {
 }
 
 func(r *LibraryRepository) Create(userID, mangaID int64, status string) (int64, error) {
-	res, err := r.db.Exec("INSERT INTO user_library (user_id, manga_id, status, current_chapter, version) VALUES (?, ?, ?, 0, 1)", userID, mangaID, status,)
+	res, err := r.db.Exec("INSERT INTO user_library (user_id, manga_id, status, current_chap, version) VALUES (?, ?, ?, 0, 1)", userID, mangaID, status,)
 	if err != nil {
 		return 0, err
 	}
@@ -23,7 +23,7 @@ func(r *LibraryRepository) Create(userID, mangaID int64, status string) (int64, 
 }
 
 func(r *LibraryRepository) GetLibrary(userID int64) ([]models.LibraryItem, error) {
-	rows, err := r.db.Query("SELECT manga_id, status, current_chapter, version FROM user_library WHERE user_id=?", userID)
+	rows, err := r.db.Query("SELECT manga_id, status, current_chap, version FROM user_library WHERE user_id=?", userID)
 	if err != nil {
 		return nil, err
 	}
@@ -64,12 +64,12 @@ func(r *LibraryRepository) ExistsByUserIDAndMangaID(userID, mangaID int64) (bool
 	return exists, nil
 }
 
-func(r *LibraryRepository) UpdateProgress(userID, mangaID int64, chapter int) (int, error) {
+func(r *LibraryRepository) UpdateProgress(userID, mangaID int64, chap int) (int, error) {
 	res, err := r.db.Exec(`
 		UPDATE user_library 
-		SET current_chapter = ?, version = version + 1, updated_at = CURRENT_TIMESTAMP 
+		SET current_chap = ?, version = version + 1, updated_at = CURRENT_TIMESTAMP 
 		WHERE user_id = ? AND manga_id = ?`,
-		chapter, userID, mangaID,
+		chap, userID, mangaID,
 	)
 	if err != nil {
 		return 0, err
@@ -81,7 +81,7 @@ func(r *LibraryRepository) UpdateProgress(userID, mangaID int64, chapter int) (i
 	}
 
 	var newVersion int 
-	err = r.db.QueryRow("SELECT version FROM user_id = ? AND manga_id = ?", userID, mangaID).Scan(&newVersion)
+	err = r.db.QueryRow("SELECT version FROM user_library WHERE user_id = ? AND manga_id = ?", userID, mangaID).Scan(&newVersion)
 
 	return newVersion, nil
 }
