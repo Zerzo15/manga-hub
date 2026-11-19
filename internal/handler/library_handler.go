@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"mangahub/internal/models"
 	"mangahub/internal/repo"
+	"mangahub/internal/tcp"
 	"net/http"
 	"strconv"
 
@@ -12,10 +13,14 @@ import (
 
 type LibraryHandler struct {
 	libRepo *repo.LibraryRepository
+	tcpHub *tcp.Server
 }
 
-func NewLibraryHandler(libRepo * repo.LibraryRepository) *LibraryHandler {
-	return &LibraryHandler{libRepo: libRepo}
+func NewLibraryHandler(libRepo *repo.LibraryRepository, tcpHub *tcp.Server) *LibraryHandler {
+	return &LibraryHandler{
+		libRepo: libRepo,
+		tcpHub: tcpHub,
+	}
 }
 
 func (h *LibraryHandler) AddToLibrary(c *gin.Context) {
@@ -91,6 +96,10 @@ func (h *LibraryHandler) UpdateProgress(c *gin.Context) {
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
 		return
+	}
+
+	if h.tcpHub != nil {
+		h.tcpHub.BroadcastProgress(userID, mangaID, req.CurrentChapter, newVersion)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
