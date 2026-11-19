@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -49,4 +50,33 @@ func AuthMiddleWare() gin.HandlerFunc {
 		c.Set("user_id", int64(userIdFloat))
 		c.Next()
 	}
+}
+
+//when naming function that would be used outside of the current file 
+//it needs to start with a UPPER case letter
+func ValidateJWT(tokenString string) (int64, error) {
+	secret := []byte(os.Getenv("JWT_SECRET"))
+	
+	token, err := jwt.Parse(tokenString, func(t *jwt.Token) (interface{}, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, jwt.ErrSignatureInvalid
+		}
+		return secret, nil
+	})
+	
+	if err != nil || !token.Valid {
+		return 0, fmt.Errorf("invalid token")
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return 0, fmt.Errorf("invalid claims")
+	}
+
+	userIDFloat, ok := claims["user_id"].(float64)
+	if !ok {
+		return 0, fmt.Errorf("missing user_id")
+	}
+
+	return int64(userIDFloat), nil
 }
