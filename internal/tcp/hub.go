@@ -4,10 +4,11 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"log"
-	"mangahub/internal/handler"
 	"net"
+	"os"
 	"sync"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
 type Server struct {
@@ -15,7 +16,7 @@ type Server struct {
 	ln         net.Listener
 	quitch chan struct{}
 	mu sync.RWMutex
-	clients map[int64]map[net.Conn]bool
+	clients map[int64]map[net.Conn]bool //allow one user to have multiple connection
 }
 
 
@@ -71,7 +72,29 @@ func (s *Server) acceptLoop() {
 
 		go s.readLoop(conn)
 	}
+}
 
+func (s *Server) addClient(userID int64, conn net.Conn) {
+	s.mu.Lock() //prevent goroutine to modify shared data at the same time
+	//useful when multiple user is trying to access
+	defer s.mu.Unlock()
+
+	if s.clients[userID] == nil {
+		s.clients[userID] = make(map[net.Conn]bool)
+	}
+	s.clients[userID][conn] = true
+}
+
+func (s * Server) removeClient(userID int64, conn net.Conn) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if conns, ok := s.clients[userID]; ok {
+		delete(conns, conn)
+		if len(conns) == 0 {
+			delete(s.clients, userID)
+		}
+	}
 }
 
 func (s *Server) readLoop(conn net.Conn) {
@@ -92,7 +115,7 @@ func (s *Server) readLoop(conn net.Conn) {
 		return
 	}
 
-	userID, err := handler.ValidateJWT(auth.Token)
+	userID, err := validateJWT(auth.Token)
 	if err != nil {
 		conn.Write([]byte(`{
 			"type":"error", 
@@ -103,22 +126,55 @@ func (s *Server) readLoop(conn net.Conn) {
 
 	s.addClient(userID, conn)
 
-	defer s.removeClient(userId, conn)
+	defer s.removeClient(userID, conn)
 
 	conn.Write([]byte(`{"type":"auth_ok}` + "\n"))
 }
 
+func (s *Server) BroadcastProgress(userID, mangaID int64, chap, version int) {
+	payload, err := json.Marshal(ProgressEvent{
+		Type: "progress_update",
+		MangaID: mangaID,
+		CurrentChapter: chap,
+		Version: version,
+	})
+	if err != nil {
+		return
+	}
 
+	payload = append(payload, '\n')
 
-func main() {
-	server := NewServer(":9090")
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	go func()  {
-		for msg := range server.msgch {
-			//payload is in []byte so we need to transfer it to string.
-			fmt.Printf("receive message from %v: %v", msg.from, string(msg.payload))
-		}
-	}()
+	for conn := range s.clients[userID] { 
+		_, _ = conn.Write(payload)
+	}
+}
+
+func validateJWT(tokenString string) (int64, error) {
+	secret := []byte(os.Getenv("JWT_SECRET"))
 	
-	log.Fatal(server.Start())
-} 
+	token, err := jwt.Parse(tokenString, func(t *jwt.Token) (interface{}, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, jwt.ErrSignatureInvalid
+		}
+		return secret, nil
+	})
+	
+	if err != nil || !token.Valid {
+		return 0, fmt.Errorf("invalid token")
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return 0, fmt.Errorf("invalid claims")
+	}
+
+	userIDFloat, ok := claims["user_id"].(float64)
+	if !ok {
+		return 0, fmt.Errorf("missing user_id")
+	}
+
+	return int64(userIDFloat), nil
+}

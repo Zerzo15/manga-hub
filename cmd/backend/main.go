@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"mangahub/internal/handler"
 	"mangahub/internal/repo"
+	"mangahub/internal/tcp"
 	"os"
 
 	"github.com/gin-gonic/gin"
@@ -25,11 +26,17 @@ func main() {
 
 	defer db.Close()
 
+	tcpServer := tcp.NewServer(":9090")
+
+	if err := tcpServer.Start(); err != nil {
+		fmt.Println("TCP server error:", err)
+	}
+
 	userRepo := repo.NewUserRepo(db)
 	libRepo := repo.NewLibraryRepo(db)
 
 	authHandler := handler.NewAuthHandler(userRepo)	
-	libHandler := handler.NewLibraryHandler(libRepo)
+	libHandler := handler.NewLibraryHandler(libRepo, tcpServer)
 
 	var version string
 	err = db.QueryRow("SELECT sqlite_version()").Scan(&version)
