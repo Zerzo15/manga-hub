@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -18,7 +19,6 @@ type Server struct {
 	mu sync.RWMutex
 	clients map[int64]map[net.Conn]bool //allow one user to have multiple connection
 }
-
 
 type AuthMessage struct {
 	Type string `json:"type"`
@@ -128,7 +128,17 @@ func (s *Server) readLoop(conn net.Conn) {
 
 	defer s.removeClient(userID, conn)
 
-	conn.Write([]byte(`{"type":"auth_ok}` + "\n"))
+	conn.Write([]byte(`{"type":"auth_ok"}` + "\n"))
+
+	for scanner.Scan() {
+		//keep connection open and check for possible scanner failure
+		if err := scanner.Err(); err != nil {
+			fmt.Println("scanner error:", err)
+			return
+		}
+	}
+
+	
 }
 
 func (s *Server) BroadcastProgress(userID, mangaID int64, chap, version int) {
@@ -148,7 +158,14 @@ func (s *Server) BroadcastProgress(userID, mangaID int64, chap, version int) {
 	defer s.mu.Unlock()
 
 	for conn := range s.clients[userID] { 
-		_, _ = conn.Write(payload)
+		_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+		if _, err = conn.Write(payload); err != nil {
+			_ = conn.Close()
+			delete(s.clients[userID], conn)
+		}
+	}
+	if len(s.clients[userID]) == 0 {
+		delete(s.clients, userID)
 	}
 }
 

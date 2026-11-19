@@ -28,9 +28,12 @@ func main() {
 
 	tcpServer := tcp.NewServer(":9090")
 
-	if err := tcpServer.Start(); err != nil {
-		fmt.Println("TCP server error:", err)
-	}
+	//allow tcp server and gin to working asynchronously
+	go func() {
+		if err := tcpServer.Start(); err != nil {
+			fmt.Println("TCP server error:", err)
+		}
+	}()
 
 	userRepo := repo.NewUserRepo(db)
 	libRepo := repo.NewLibraryRepo(db)
