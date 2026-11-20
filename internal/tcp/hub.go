@@ -26,11 +26,11 @@ type AuthMessage struct {
 }
 
 type ProgressEvent struct {
-	Type string `json:"type"`
-	MangaID int64 `json:"manga_id"`
-	Status string `json:"status"`
-	CurrentChapter int `json:"current_chap"`
-	Version int `json:"version"`
+	Type           string `json:"type"`
+	MangaID        int64  `json:"manga_id"`
+	Status         string `json:"status,omitempty"`
+	CurrentChapter int    `json:"chapter"`
+	Version        int    `json:"version"`
 }
 
 //take the port number as the parameter (ex ":9090")
@@ -108,34 +108,26 @@ func (s *Server) readLoop(conn net.Conn) {
 
 	var auth AuthMessage
 	if err := json.Unmarshal(scanner.Bytes(), &auth); err != nil || auth.Type != "auth" {
-		conn.Write([]byte(`{
-			"type":"error", 
-			"message":"required auth"
-		}` + "\n"))
+		conn.Write([]byte(`{"type":"error","message":"required auth"}` + "\n"))
 		return
 	}
 
 	userID, err := validateJWT(auth.Token)
 	if err != nil {
-		conn.Write([]byte(`{
-			"type":"error", 
-			"message":"invalid token"
-		}` + "\n"))
+		conn.Write([]byte(`{"type":"error","message":"invalid token"}` + "\n"))
 		return
 	}
 
 	s.addClient(userID, conn)
-
 	defer s.removeClient(userID, conn)
 
 	conn.Write([]byte(`{"type":"auth_ok"}` + "\n"))
 
 	for scanner.Scan() {
-		//keep connection open and check for possible scanner failure
-		if err := scanner.Err(); err != nil {
-			fmt.Println("scanner error:", err)
-			return
-		}
+		// keep connection open until client disconnects
+	}
+	if err := scanner.Err(); err != nil {
+		fmt.Println("scanner error:", err)
 	}
 
 	
@@ -143,10 +135,10 @@ func (s *Server) readLoop(conn net.Conn) {
 
 func (s *Server) BroadcastProgress(userID, mangaID int64, chap, version int) {
 	payload, err := json.Marshal(ProgressEvent{
-		Type: "progress_update",
-		MangaID: mangaID,
+		Type:           "progress_updated",
+		MangaID:        mangaID,
 		CurrentChapter: chap,
-		Version: version,
+		Version:        version,
 	})
 	if err != nil {
 		return
@@ -157,8 +149,8 @@ func (s *Server) BroadcastProgress(userID, mangaID int64, chap, version int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	for conn := range s.clients[userID] { 
-		_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+	for conn := range s.clients[userID] {
+		_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 		if _, err = conn.Write(payload); err != nil {
 			_ = conn.Close()
 			delete(s.clients[userID], conn)

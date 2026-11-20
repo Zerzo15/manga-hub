@@ -42,16 +42,16 @@ func (h *LibraryHandler) AddToLibrary(c *gin.Context) {
 		return 
 	}
 
-	id, err := h.libRepo.Create(userID, req.MangaID, req.Status) 
+	_, err = h.libRepo.Create(userID, req.MangaID, req.Status)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
 		return
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
-		"user_id": userID,
-		"manga_id": id,
-		"status": req.Status,
+		"user_id":  userID,
+		"manga_id": req.MangaID,
+		"status":   req.Status,
 	})
 }
 
@@ -88,7 +88,7 @@ func (h *LibraryHandler) UpdateProgress(c *gin.Context) {
 		return
 	}
 
-	newVersion, err := h.libRepo.UpdateProgress(userID, mangaID, req.CurrentChapter)
+	newVersion, err := h.libRepo.UpdateProgress(userID, mangaID, *req.CurrentChapter)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			c.JSON(http.StatusNotFound, gin.H{"error": "manga not found"})
@@ -99,13 +99,13 @@ func (h *LibraryHandler) UpdateProgress(c *gin.Context) {
 	}
 
 	if h.tcpHub != nil {
-		h.tcpHub.BroadcastProgress(userID, mangaID, req.CurrentChapter, newVersion)
+		h.tcpHub.BroadcastProgress(userID, mangaID, *req.CurrentChapter, newVersion)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"message":         "progress updated",
 		"manga_id":        mangaID,
-		"current_chapter": req.CurrentChapter,
+		"current_chapter": *req.CurrentChapter,
 		"version":         newVersion,
 	})
 }

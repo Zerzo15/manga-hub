@@ -77,9 +77,13 @@ func main() {
 
 	fmt.Println("Created table!")
 
-	r := gin.Default() 
+	r := gin.Default()
 
-	auth := r.Group("api/auth")
+	r.GET("/api/health", func(c *gin.Context) {
+		c.JSON(200, gin.H{"status": "ok"})
+	})
+
+	auth := r.Group("/api/auth")
 	{
 		auth.POST("/register", authHandler.Register)
 		auth.POST("/login", authHandler.Login)
