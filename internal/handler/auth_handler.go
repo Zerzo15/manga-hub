@@ -53,7 +53,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"used_id": id, "username": req.Username})
+	c.JSON(http.StatusCreated, gin.H{"user_id": id, "username": req.Username})
 }
 
 func (h *AuthHandler) Login(c *gin.Context) {
@@ -80,6 +80,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	tokenString, err := token.SignedString(jwtSecret)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "error creating token"})
+		return
 	}
 	
 	c.JSON(http.StatusOK, gin.H{
