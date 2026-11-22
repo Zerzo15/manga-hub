@@ -5,23 +5,28 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-	"os"
 	"sync"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
+	"mangahub/internal/auth"
 )
 
+type Client struct {
+	conn    net.Conn
+	writeMu sync.Mutex
+}
+
 type Server struct {
-	listenAddr string			
+	listenAddr string
 	ln         net.Listener
-	quitch chan struct{}
-	mu sync.RWMutex
-	clients map[int64]map[net.Conn]bool //allow one user to have multiple connection
+	quitch     chan struct{}
+	mu         sync.RWMutex
+	clients    map[int64]map[*Client]bool //allow one user to have multiple connection
+	jwtService *auth.JWTService
 }
 
 type AuthMessage struct {
-	Type string `json:"type"`
+	Type  string `json:"type"`
 	Token string `json:"token"`
 }
 
@@ -34,18 +39,19 @@ type ProgressEvent struct {
 }
 
 //take the port number as the parameter (ex ":9090")
-func NewServer(listenAddr string) *Server {
+func NewServer(listenAddr string, jwtService *auth.JWTService) *Server {
 	return &Server{
 		listenAddr: listenAddr,
-		quitch: make(chan struct{}),
-		clients: map[int64]map[net.Conn]bool{},
+		quitch:     make(chan struct{}),
+		clients:    map[int64]map[*Client]bool{},
+		jwtService: jwtService,
 	}
 }
 
 func (s *Server) Start() error {
 	ln, err := net.Listen("tcp", s.listenAddr)
 	if err != nil {
-		return  err
+		return err
 	}
 	defer ln.Close()
 
@@ -54,18 +60,23 @@ func (s *Server) Start() error {
 	go s.acceptLoop()
 
 	//wait for the quitch channel
-	<- s.quitch 
+	<-s.quitch
 
 	return nil
 }
 
-//handling connection 
+//handling connection
 func (s *Server) acceptLoop() {
 	for {
 		conn, err := s.ln.Accept()
 		if err != nil {
-			fmt.Println("accept error:", err)
-			continue
+			select { //handle shutdown
+			case <-s.quitch:
+				return
+			default:
+				fmt.Println("accept error:", err)
+				continue
+			}
 		}
 
 		fmt.Println("new connection to the server:", conn.RemoteAddr())
@@ -74,23 +85,23 @@ func (s *Server) acceptLoop() {
 	}
 }
 
-func (s *Server) addClient(userID int64, conn net.Conn) {
+func (s *Server) addClient(userID int64, client *Client) {
 	s.mu.Lock() //prevent goroutine to modify shared data at the same time
 	//useful when multiple user is trying to access
 	defer s.mu.Unlock()
 
 	if s.clients[userID] == nil {
-		s.clients[userID] = make(map[net.Conn]bool)
+		s.clients[userID] = make(map[*Client]bool)
 	}
-	s.clients[userID][conn] = true
+	s.clients[userID][client] = true
 }
 
-func (s * Server) removeClient(userID int64, conn net.Conn) {
+func (s *Server) removeClient(userID int64, client *Client) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if conns, ok := s.clients[userID]; ok {
-		delete(conns, conn)
+		delete(conns, client)
 		if len(conns) == 0 {
 			delete(s.clients, userID)
 		}
@@ -98,9 +109,18 @@ func (s * Server) removeClient(userID int64, conn net.Conn) {
 }
 
 func (s *Server) readLoop(conn net.Conn) {
+	client := &Client{
+		conn: conn,
+	}
+
 	defer conn.Close()
-	
+
 	scanner := bufio.NewScanner(conn)
+
+	//give the client 60 second window to enter an authentication
+	if err := conn.SetReadDeadline(time.Now().Add(60 * time.Second)); err != nil {
+		return
+	}
 
 	if !scanner.Scan() {
 		return
@@ -112,16 +132,24 @@ func (s *Server) readLoop(conn net.Conn) {
 		return
 	}
 
-	userID, err := validateJWT(auth.Token)
+	userID, err := s.validateJWT(auth.Token)
 	if err != nil {
 		conn.Write([]byte(`{"type":"error","message":"invalid token"}` + "\n"))
 		return
 	}
 
-	s.addClient(userID, conn)
-	defer s.removeClient(userID, conn)
+	//authentication is sucess
+	//remove the previous timer so the connection stay open
+	if err := conn.SetReadDeadline(time.Time{}); err != nil {
+		return
+	}
 
-	conn.Write([]byte(`{"type":"auth_ok"}` + "\n"))
+	s.addClient(userID, client)
+	defer s.removeClient(userID, client)
+
+	if err := client.WriteMessage([]byte(`{"type":"auth_ok"}` + "\n")); err != nil {
+		return
+	}
 
 	for scanner.Scan() {
 		// keep connection open until client disconnects
@@ -129,8 +157,19 @@ func (s *Server) readLoop(conn net.Conn) {
 	if err := scanner.Err(); err != nil {
 		fmt.Println("scanner error:", err)
 	}
+}
 
-	
+//guarantee one go routine write to one connection at a time
+func (c *Client) WriteMessage(payload []byte) error {
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+
+	if err := c.conn.SetWriteDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		return err
+	}
+
+	_, err := c.conn.Write(payload)
+	return err
 }
 
 func (s *Server) BroadcastProgress(userID, mangaID int64, chap, version int) {
@@ -146,44 +185,29 @@ func (s *Server) BroadcastProgress(userID, mangaID int64, chap, version int) {
 
 	payload = append(payload, '\n')
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
 
-	for conn := range s.clients[userID] {
-		_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-		if _, err = conn.Write(payload); err != nil {
-			_ = conn.Close()
-			delete(s.clients[userID], conn)
-		}
+	userClients := s.clients[userID]
+	clients := make([]*Client, 0, len(userClients))
+
+	for client := range userClients {
+		clients = append(clients, client)
 	}
-	if len(s.clients[userID]) == 0 {
-		delete(s.clients, userID)
+
+	s.mu.RUnlock()
+
+	for _, client := range clients {
+		if err := client.WriteMessage(payload); err != nil {
+			_ = client.conn.Close()
+			s.removeClient(userID, client)
+		}
 	}
 }
 
-func validateJWT(tokenString string) (int64, error) {
-	secret := []byte(os.Getenv("JWT_SECRET"))
-	
-	token, err := jwt.Parse(tokenString, func(t *jwt.Token) (interface{}, error) {
-		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, jwt.ErrSignatureInvalid
-		}
-		return secret, nil
-	})
-	
-	if err != nil || !token.Valid {
-		return 0, fmt.Errorf("invalid token")
+func (s *Server) validateJWT(tokenString string) (int64, error) {
+	claims, err := s.jwtService.ValidateToken(tokenString)
+	if err != nil {
+		return 0, err
 	}
-
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok {
-		return 0, fmt.Errorf("invalid claims")
-	}
-
-	userIDFloat, ok := claims["user_id"].(float64)
-	if !ok {
-		return 0, fmt.Errorf("missing user_id")
-	}
-
-	return int64(userIDFloat), nil
+	return claims.UserID, nil
 }

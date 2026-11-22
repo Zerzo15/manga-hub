@@ -13,13 +13,13 @@ import (
 
 type LibraryHandler struct {
 	libRepo *repo.LibraryRepository
-	tcpHub *tcp.Server
+	tcpHub  *tcp.Server
 }
 
 func NewLibraryHandler(libRepo *repo.LibraryRepository, tcpHub *tcp.Server) *LibraryHandler {
 	return &LibraryHandler{
 		libRepo: libRepo,
-		tcpHub: tcpHub,
+		tcpHub:  tcpHub,
 	}
 }
 
@@ -29,17 +29,17 @@ func (h *LibraryHandler) AddToLibrary(c *gin.Context) {
 	var req models.AddLibraryRequest
 	if err := c.ShouldBind(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "manga_id and status is required"})
-		return 
+		return
 	}
 
 	checker, err := h.libRepo.ExistsByUserIDAndMangaID(userID, req.MangaID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
-		return 
+		return
 	}
 	if checker {
 		c.JSON(http.StatusConflict, gin.H{"error": "manga already in library"})
-		return 
+		return
 	}
 
 	_, err = h.libRepo.Create(userID, req.MangaID, req.Status)
@@ -80,7 +80,6 @@ func (h *LibraryHandler) UpdateProgress(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid manga ID format"})
 		return
 	}
-	
 
 	var req models.UpdateProgressRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -128,9 +127,9 @@ func (h *LibraryHandler) DeleteManga(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
 		return
 	}
-	
+
 	c.JSON(http.StatusOK, gin.H{
-		"message": "manga deleted",
+		"message":  "manga deleted",
 		"manga_id": mangaID,
 	})
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"mangahub/internal/auth"
 	"mangahub/internal/handler"
 	"mangahub/internal/repo"
 	"mangahub/internal/tcp"
@@ -13,6 +14,12 @@ import (
 )
 
 func main() {
+	jwtService, err := auth.NewJWTService()
+	if err != nil {
+		fmt.Println("JWT configuration error:", err)
+		return
+	}
+
 	if err := os.MkdirAll("./internal/database", 0755); err != nil {
 		fmt.Println("Error creating database: ", err)
 		return
@@ -26,7 +33,7 @@ func main() {
 
 	defer db.Close()
 
-	tcpServer := tcp.NewServer(":9090")
+	tcpServer := tcp.NewServer(":9090", jwtService)
 
 	//allow tcp server and gin to working asynchronously
 	go func() {
@@ -38,7 +45,7 @@ func main() {
 	userRepo := repo.NewUserRepo(db)
 	libRepo := repo.NewLibraryRepo(db)
 
-	authHandler := handler.NewAuthHandler(userRepo)	
+	authHandler := handler.NewAuthHandler(userRepo, jwtService)
 	libHandler := handler.NewLibraryHandler(libRepo, tcpServer)
 
 	var version string
@@ -90,7 +97,7 @@ func main() {
 	}
 
 	api := r.Group("/api")
-	api.Use(handler.AuthMiddleWare())
+	api.Use(handler.AuthMiddleware(jwtService))
 	{
 		api.GET("/library", libHandler.GetLibrary)
 		api.POST("/library", libHandler.AddToLibrary)

@@ -2,51 +2,50 @@ package handler
 
 import (
 	"net/http"
-	"os"
 	"strings"
 
+	"mangahub/internal/auth"
+
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v5"
 )
 
-func AuthMiddleWare() gin.HandlerFunc {
+func AuthMiddleware(jwtService *auth.JWTService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
-		
-		if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
-			return 
+
+		if authHeader == "" {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+				"error": "missing Authorization header",
+			})
+			return
 		}
 
-		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-		secret := []byte(os.Getenv("JWT_SECRET"))
-
-		//check the token if its expired or 
-		//does it belongs to the server with the help of the secret key 
-		token, err := jwt.Parse(tokenString, func(t *jwt.Token) (interface{}, error) {
-			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, jwt.ErrSignatureInvalid
-			}
-			return secret, nil
-		})
-		if err != nil || !token.Valid {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token claims or expired"})
-			return 
+		const prefix = "Bearer "
+		if !strings.HasPrefix(authHeader, prefix) {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+				"error": "Authorization header must use Bearer token",
+			})
+			return
 		}
 
-		claims, ok := token.Claims.(jwt.MapClaims) 
-		if !ok {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token claims"})
-			return 
+		tokenString := strings.TrimSpace(strings.TrimPrefix(authHeader, prefix))
+		if tokenString == "" {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+				"error": "empty bearer token",
+			})
+			return
 		}
 
-		userIdFloat, ok := claims["user_id"].(float64) 
-		if !ok {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid id in token"})
-			return 
+		claims, err := jwtService.ValidateToken(tokenString)
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+				"error": "invalid or expired token",
+			})
+			return
 		}
 
-		c.Set("user_id", int64(userIdFloat))
+		c.Set("user_id", claims.UserID)
+		c.Set("username", claims.Username)
 		c.Next()
 	}
 }
