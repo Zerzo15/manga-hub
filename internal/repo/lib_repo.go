@@ -64,8 +64,16 @@ func(r *LibraryRepository) ExistsByUserIDAndMangaID(userID, mangaID int64) (bool
 	return exists, nil
 }
 
+//transactional update to handle multiple query happen at the same time 
+//trying to change the data
 func(r *LibraryRepository) UpdateProgress(userID, mangaID int64, chap int) (int, error) {
-	res, err := r.db.Exec(`
+	tx, err := r.db.Begin() 
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	res, err := tx.Exec(`
 		UPDATE user_library 
 		SET current_chap = ?, version = version + 1, updated_at = CURRENT_TIMESTAMP 
 		WHERE user_id = ? AND manga_id = ?`,
@@ -81,7 +89,15 @@ func(r *LibraryRepository) UpdateProgress(userID, mangaID int64, chap int) (int,
 	}
 
 	var newVersion int 
-	err = r.db.QueryRow("SELECT version FROM user_library WHERE user_id = ? AND manga_id = ?", userID, mangaID).Scan(&newVersion)
+	err = tx.QueryRow("SELECT version FROM user_library WHERE user_id = ? AND manga_id = ?", userID, mangaID).
+		Scan(&newVersion)
+	if err != nil {
+		return 0, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
 
 	return newVersion, nil
 }
