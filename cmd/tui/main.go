@@ -1,8 +1,9 @@
 package main
 
-import "github.com/rivo/tview"
-
 func main() {
-	app := tview.NewApplication()
-	
+	client := NewAPIClient("http://localhost:8080")
+	ui := NewTUI(client, "localhost:9090")
+	if err := ui.Run(); err != nil {
+		panic(err)
+	}
 }

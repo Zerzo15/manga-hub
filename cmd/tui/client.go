@@ -18,7 +18,7 @@ type APIClient struct {
 func NewAPIClient(baseURL string) *APIClient {
 	return &APIClient{
 		BaseURL: baseURL,
-		Http: &http.Client{Timeout: 5 * time.Second},
+		Http:    &http.Client{Timeout: 5 * time.Second},
 	}
 }
 
@@ -28,13 +28,13 @@ func (c *APIClient) Register(username, password string) error {
 		Password: password,
 	})
 
-	resp, err := c.Http.Post(c.BaseURL + "/api/auth/register", "application/json", bytes.NewBuffer(body))
+	resp, err := c.Http.Post(c.BaseURL+"/api/auth/register", "application/json", bytes.NewBuffer(body))
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusCreated {
 		return fmt.Errorf("register error with status code: %v", resp.StatusCode)
 	}
 
@@ -53,7 +53,7 @@ func (c *APIClient) Login(username, password string) error {
 	})
 
 	//public route (doesnt need authentication) => doesnt need header
-	resp, err := c.Http.Post(c.BaseURL + "/api/auth/login", "application/json", bytes.NewBuffer(body))
+	resp, err := c.Http.Post(c.BaseURL+"/api/auth/login", "application/json", bytes.NewBuffer(body))
 	if err != nil {
 		return err
 	}
@@ -67,7 +67,7 @@ func (c *APIClient) Login(username, password string) error {
 		Token string `json:"token"`
 	}
 	//read the raw json byte stream from the server's respond
-	//parse the json to populate newly created res struct 
+	//parse the json to populate newly created res struct
 	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
 		return err
 	}
@@ -77,13 +77,13 @@ func (c *APIClient) Login(username, password string) error {
 }
 
 func (c *APIClient) GetLibrary() ([]models.LibraryItem, error) {
-	//NewRequest allow the attachment of headers 
-	req, _ := http.NewRequest("GET", c.BaseURL + "/api/library", nil)
-	req.Header.Set("Authorization", "Bearer " + c.Token)
+	//NewRequest allow the attachment of headers
+	req, _ := http.NewRequest("GET", c.BaseURL+"/api/library", nil)
+	req.Header.Set("Authorization", "Bearer "+c.Token)
 
 	resp, err := c.Http.Do(req)
 	if err != nil {
-		return  nil, err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
@@ -100,18 +100,18 @@ func (c *APIClient) GetLibrary() ([]models.LibraryItem, error) {
 func (c *APIClient) AddToLibrary(mangaID int64, status string) (models.LibraryItem, error) {
 	body, err := json.Marshal(models.AddLibraryRequest{
 		MangaID: mangaID,
-		Status: status,
+		Status:  status,
 	})
 	if err != nil {
 		return models.LibraryItem{}, err
 	}
 
-	req, err := http.NewRequest("POST", c.BaseURL + "/api/library", bytes.NewBuffer(body))
+	req, err := http.NewRequest("POST", c.BaseURL+"/api/library", bytes.NewBuffer(body))
 	if err != nil {
 		return models.LibraryItem{}, err
 	}
-	
-	req.Header.Set("Authorization", "Bearer " + c.Token)
+
+	req.Header.Set("Authorization", "Bearer "+c.Token)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.Http.Do(req)
@@ -120,11 +120,11 @@ func (c *APIClient) AddToLibrary(mangaID int64, status string) (models.LibraryIt
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusCreated {
 		return models.LibraryItem{}, fmt.Errorf("error add manga with status code %v", resp.StatusCode)
 	}
 
-	var res models.LibraryItem 
+	var res models.LibraryItem
 	err = json.NewDecoder(resp.Body).Decode(&res)
 
 	return res, err
@@ -144,11 +144,11 @@ func (c *APIClient) UpdateProgress(mangaID int64, currChap int) (models.LibraryI
 	if err != nil {
 		return models.LibraryItem{}, err
 	}
-	
-	req.Header.Set("Authorization", "Bearer " + c.Token)
+
+	req.Header.Set("Authorization", "Bearer "+c.Token)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := c.Http.Do(req) 
+	resp, err := c.Http.Do(req)
 	if err != nil {
 		return models.LibraryItem{}, err
 	}
@@ -160,20 +160,19 @@ func (c *APIClient) UpdateProgress(mangaID int64, currChap int) (models.LibraryI
 
 	var res models.LibraryItem
 	err = json.NewDecoder(resp.Body).Decode(&res)
-	
+
 	return res, err
-} 
+}
 
 func (c *APIClient) DeleteManga(mangaID int64) error {
 	url := fmt.Sprintf("%v/api/library/%v", c.BaseURL, mangaID)
 
-	req, err := http.NewRequest("DELETE", url, nil) 
+	req, err := http.NewRequest("DELETE", url, nil)
 	if err != nil {
 		return err
 	}
 
-	req.Header.Set("Authorization", "Bearer " + c.Token)
-	
+	req.Header.Set("Authorization", "Bearer "+c.Token)
 
 	resp, err := c.Http.Do(req)
 	if err != nil {
